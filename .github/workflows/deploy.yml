@@ -9,11 +9,8 @@ on:
         type: choice
         default: sin - 新加坡 (Singapore)
         options:
-          - dal - 达拉斯 (Dallas, US)
-          - fra - 法兰克福 (Frankfurt, DE)
-          - sfo - 旧金山 (San Francisco, US)
           - sin - 新加坡 (Singapore)
-          - was - 华盛顿 (Washington DC, US)
+          - sfo - 旧金山 (San Francisco, US)
 
 jobs:
   deploy:
@@ -57,16 +54,44 @@ jobs:
           echo "name=${ORG}" >> "$GITHUB_OUTPUT"
           echo "Using organization: ${ORG}"
 
-      - name: Prepare sing-box config
+      - name: Select per-metro secrets
+        id: cfg
         env:
-          UUID: ${{ secrets.UUID }}
-          ARGO_DOMAIN: ${{ secrets.ARGO_DOMAIN }}
-          ARGO_TOKEN: ${{ secrets.ARGO_TOKEN }}
+          METRO: ${{ inputs.metro }}
+          UUID_SIN: ${{ secrets.UUID_SIN }}
+          UUID_SFO: ${{ secrets.UUID_SFO }}
+          ARGO_DOMAIN_SIN: ${{ secrets.ARGO_DOMAIN_SIN }}
+          ARGO_TOKEN_SIN: ${{ secrets.ARGO_TOKEN_SIN }}
+          ARGO_DOMAIN_SFO: ${{ secrets.ARGO_DOMAIN_SFO }}
+          ARGO_TOKEN_SFO: ${{ secrets.ARGO_TOKEN_SFO }}
         run: |
+          set -euo pipefail
+          METRO_CODE="${METRO%% *}"
+          case "$METRO_CODE" in
+            sin)
+              UUID="$UUID_SIN"; ARGO_DOMAIN="$ARGO_DOMAIN_SIN"; ARGO_TOKEN="$ARGO_TOKEN_SIN" ;;
+            sfo)
+              UUID="$UUID_SFO"; ARGO_DOMAIN="$ARGO_DOMAIN_SFO"; ARGO_TOKEN="$ARGO_TOKEN_SFO" ;;
+            *)
+              echo "Unsupported metro: $METRO_CODE" >&2; exit 1 ;;
+          esac
           if [[ -z "$UUID" ]]; then
-            echo "Secret UUID is required." >&2
+            echo "Secret UUID_${METRO_CODE^^} is required." >&2
             exit 1
           fi
+          {
+            echo "uuid=${UUID}"
+            echo "argo_domain=${ARGO_DOMAIN}"
+            echo "argo_token=${ARGO_TOKEN}"
+            echo "metro_code=${METRO_CODE}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Prepare sing-box config
+        env:
+          UUID: ${{ steps.cfg.outputs.uuid }}
+          ARGO_DOMAIN: ${{ steps.cfg.outputs.argo_domain }}
+          ARGO_TOKEN: ${{ steps.cfg.outputs.argo_token }}
+        run: |
           chmod +x scripts/prepare-config.sh
           ./scripts/prepare-config.sh "$UUID" "$ARGO_DOMAIN" "$ARGO_TOKEN"
 
@@ -77,10 +102,9 @@ jobs:
       - name: Deploy instance
         id: deploy
         env:
-          METRO: ${{ inputs.metro }}
+          METRO_CODE: ${{ steps.cfg.outputs.metro_code }}
           ORG: ${{ steps.org.outputs.name }}
         run: |
-          METRO_CODE="${METRO%% *}"
           RUN_JSON="$(unikraft run \
             --metro "$METRO_CODE" \
             --publish 443:8080/http+tls \
@@ -95,13 +119,12 @@ jobs:
             exit 1
           fi
           echo "fqdn=${FQDN}" >> "$GITHUB_OUTPUT"
-          echo "metro=${METRO_CODE}" >> "$GITHUB_OUTPUT"
           echo "Deployed at: https://${FQDN}"
 
       - name: Generate encrypted subscription link
         env:
-          UUID: ${{ secrets.UUID }}
-          ARGO_DOMAIN: ${{ secrets.ARGO_DOMAIN }}
+          UUID: ${{ steps.cfg.outputs.uuid }}
+          ARGO_DOMAIN: ${{ steps.cfg.outputs.argo_domain }}
         run: |
           chmod +x scripts/generate-subscription.sh scripts/encrypt-subscription.sh
           SUBSCRIPTION="$(./scripts/generate-subscription.sh \
@@ -112,7 +135,7 @@ jobs:
           {
             echo "### 部署完成"
             echo ""
-            echo "- **地区**: \`${{ steps.deploy.outputs.metro }}\`"
+            echo "- **地区**: \`${{ steps.cfg.outputs.metro_code }}\`"
             echo "- **域名**: \`${{ steps.deploy.outputs.fqdn }}\`"
             echo "- **镜像**: \`${{ steps.org.outputs.name }}/unikraft:latest\`"
             echo ""
