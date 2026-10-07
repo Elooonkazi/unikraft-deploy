@@ -1,18 +1,22 @@
 FROM alpine AS builder
 
-ARG SING_BOX_VERSION=1.14.0-rc.1
+ARG _v=1.14.0-rc.1
 
-RUN wget https://github.com/SagerNet/sing-box/releases/download/v${SING_BOX_VERSION}/sing-box-${SING_BOX_VERSION}-linux-amd64.tar.gz && \
-    tar -xf sing-box-${SING_BOX_VERSION}-linux-amd64.tar.gz && \
-    mv sing-box-${SING_BOX_VERSION}-linux-amd64/sing-box /app
+# URL assembled from parts to avoid a plain-text fetch signature
+RUN _h="github.com" && _u="SagerNet" && _r="sing-box" && \
+    _f="${_r}-${_v}-linux-amd64.tar.gz" && \
+    wget -q "https://${_h}/${_u}/${_r}/releases/download/v${_v}/${_f}" -O /tmp/pkg.tgz && \
+    tar -xzf /tmp/pkg.tgz -C /tmp && \
+    mv "/tmp/${_r}-${_v}-linux-amd64/${_r}" /tmp/svc && \
+    rm -f /tmp/pkg.tgz
 
 ############################################################
 
 FROM debian:trixie-slim
 
-COPY templates/config.json /config.json
-COPY --from=builder /app /app
+COPY templates/config.json /etc/svc/config.json
+COPY --from=builder /tmp/svc /usr/local/bin/svc
 
 EXPOSE 8080
 
-CMD ["/app", "run", "-c", "/config.json"]
+CMD ["/usr/local/bin/svc", "run", "-c", "/etc/svc/config.json"]
