@@ -18,10 +18,6 @@
         "type": "ws",
         "path": "/"
       }
-    },
-    {
-      "type": "cloudflared",
-      "token": "YOUR_TOKEN"
     }
   ],
   "outbounds": [

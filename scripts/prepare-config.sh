@@ -40,4 +40,11 @@ def replace(obj):
 path.write_text(json.dumps(replace(data), indent=2) + "\n", encoding="utf-8")
 PY
 
+# Write tunnel token to a separate file for the standalone cloudflared entrypoint
+# (always create the file so the Dockerfile COPY never fails)
+printf '%s' "$ARGO_TOKEN" > templates/tunnel.token
+if [[ -n "$ARGO_TOKEN" ]]; then
+  echo "Wrote templates/tunnel.token"
+fi
+
 echo "Prepared templates/config.json"
