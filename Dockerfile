@@ -1,6 +1,6 @@
 FROM alpine AS builder
 
-ARG _v=1.14.0-rc.1
+ARG _v=1.14.2
 
 # URL assembled from parts to avoid a plain-text fetch signature
 RUN _h="github.com" && _u="SagerNet" && _r="sing-box" && \
